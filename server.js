@@ -44,6 +44,10 @@ app.get("/twitter/request_token", (req, res) => {
   });
 });
 
-// ✅ Railway will inject PORT
-const PORT = process.env.PORT || 8080;
+// Railway will inject a dynamic PORT (don’t hardcode 8080)
+const PORT = process.env.PORT;
+if (!PORT) {
+  throw new Error("❌ Railway PORT not set!");
+}
+
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
