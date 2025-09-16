@@ -3,15 +3,19 @@ const OAuth = require("oauth").OAuth;
 
 const app = express();
 
-const consumerKey = "BYZrJtC3a53FECsliN1ltrfjv";        // From Twitter Developer Portal
-const consumerSecret = "AP7pTwvjGhpFDOzqJsQrUbOH3vr6SvbsrmxMEMVgS7uxfJ53GP";  // Keep secret!
+// ✅ Replace these with your real Twitter API Key + Secret
+const consumerKey = process.env.TWITTER_API_KEY || "YOUR_TWITTER_API_KEY";
+const consumerSecret = process.env.TWITTER_API_SECRET || "YOUR_TWITTER_API_SECRET";
 
-const requestTokenURL = "https://api.x.com/oauth/request_token";
-const accessTokenURL = "https://api.x.com/oauth/access_token";
-const authorizeURL = "https://api.x.com/oauth/authenticate";
+// Twitter OAuth URLs
+const requestTokenURL = "https://api.twitter.com/oauth/request_token";
+const accessTokenURL = "https://api.twitter.com/oauth/access_token";
+const authorizeURL = "https://api.twitter.com/oauth/authenticate";
 
-const callbackURL = "https://brainix-sudoku-test.firebaseapp.com/__/auth/handler"; // Firebase OAuth handler
+// Firebase callback (must match Firebase + Twitter dev portal)
+const callbackURL = "https://brainix-sudoku-test.firebaseapp.com/__/auth/handler";
 
+// Setup OAuth client
 const oa = new OAuth(
   requestTokenURL,
   accessTokenURL,
@@ -22,9 +26,9 @@ const oa = new OAuth(
   "HMAC-SHA1"
 );
 
-// Unity calls this to get a fresh request token
+// Endpoint Unity will call to get fresh request_token
 app.get("/twitter/request_token", (req, res) => {
-  oa.getOAuthRequestToken((error, oauthToken, oauthTokenSecret, results) => {
+  oa.getOAuthRequestToken((error, oauthToken, oauthTokenSecret) => {
     if (error) {
       console.error("Error getting request token:", error);
       return res.status(500).json({ error: "Failed to get request token" });
@@ -37,5 +41,6 @@ app.get("/twitter/request_token", (req, res) => {
   });
 });
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+// Railway will assign dynamic port
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
