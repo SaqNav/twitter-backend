@@ -3,19 +3,17 @@ const OAuth = require("oauth").OAuth;
 
 const app = express();
 
-// ✅ Use environment variables for security (set in Railway)
-const consumerKey = process.env.TWITTER_API_KEY;
-const consumerSecret = process.env.TWITTER_API_SECRET;
+// ✅ Use Railway environment variables
+const consumerKey = process.env.TWITTER_API_KEY || "MISSING_KEY";
+const consumerSecret = process.env.TWITTER_API_SECRET || "MISSING_SECRET";
 
-// Twitter OAuth URLs
 const requestTokenURL = "https://api.twitter.com/oauth/request_token";
 const accessTokenURL = "https://api.twitter.com/oauth/access_token";
 const authorizeURL = "https://api.twitter.com/oauth/authenticate";
 
-// Firebase callback (must match what you added in Twitter Developer Portal)
+// Your Firebase OAuth redirect
 const callbackURL = "https://brainix-sudoku-test.firebaseapp.com/__/auth/handler";
 
-// Setup OAuth client
 const oa = new OAuth(
   requestTokenURL,
   accessTokenURL,
@@ -26,7 +24,12 @@ const oa = new OAuth(
   "HMAC-SHA1"
 );
 
-// Endpoint Unity will call to get fresh request_token
+// ✅ Root route just to confirm server is alive
+app.get("/", (req, res) => {
+  res.send("🚀 Twitter backend is running on Railway!");
+});
+
+// Endpoint Unity will call to get request token
 app.get("/twitter/request_token", (req, res) => {
   oa.getOAuthRequestToken((error, oauthToken, oauthTokenSecret) => {
     if (error) {
@@ -41,6 +44,6 @@ app.get("/twitter/request_token", (req, res) => {
   });
 });
 
-// Railway will assign the port → fallback to 8080
+// ✅ Railway will inject PORT
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
