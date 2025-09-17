@@ -87,8 +87,9 @@ app.get("/twitter/callback", (req, res) => {
         // Mint a Firebase custom token
         const firebaseToken = await admin.auth().createCustomToken(uid);
 
-        // ✅ Return JSON (Unity will consume this or deep link handler will catch it)
-        res.json({ firebaseToken });
+        // ✅ Redirect to Unity app (deep link)
+        const redirectUrl = `mygame://auth?token=${firebaseToken}`;
+        res.redirect(redirectUrl);
       } catch (e) {
         console.error("❌ Firebase token creation failed:", e);
         res.status(500).send("Firebase auth failed");
