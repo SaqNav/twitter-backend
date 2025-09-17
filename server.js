@@ -1,19 +1,27 @@
 const express = require("express");
 const OAuth = require("oauth").OAuth;
+const admin = require("firebase-admin");
 
 const app = express();
 
-// ✅ Use Railway environment variables
-const consumerKey = process.env.TWITTER_API_KEY || "MISSING_KEY";
-const consumerSecret = process.env.TWITTER_API_SECRET || "MISSING_SECRET";
+// ✅ Railway env vars
+const consumerKey = process.env.TWITTER_API_KEY;
+const consumerSecret = process.env.TWITTER_API_SECRET;
 
+// Twitter OAuth endpoints
 const requestTokenURL = "https://api.twitter.com/oauth/request_token";
 const accessTokenURL = "https://api.twitter.com/oauth/access_token";
 const authorizeURL = "https://api.twitter.com/oauth/authenticate";
 
-// Your Firebase OAuth redirect
-const callbackURL = "https://brainix-sudoku-test.firebaseapp.com/__/auth/handler";
+// 🔹 New callback URL → must be added in Twitter Developer Portal
+const callbackURL = "https://twitter-backend-production-d63a.up.railway.app/twitter/callback";
 
+// Setup Firebase Admin (needs service account JSON in Railway env)
+admin.initializeApp({
+  credential: admin.credential.applicationDefault()
+});
+
+// Setup Twitter OAuth client
 const oa = new OAuth(
   requestTokenURL,
   accessTokenURL,
@@ -24,12 +32,12 @@ const oa = new OAuth(
   "HMAC-SHA1"
 );
 
-// ✅ Root route just to confirm server is alive
+// ✅ Root health check
 app.get("/", (req, res) => {
-  res.send("🚀 Twitter backend is running on Railway!");
+  res.send("🚀 Twitter backend with Firebase Custom Token is running!");
 });
 
-// Endpoint Unity will call to get request token
+// Step 1: Unity requests Twitter auth URL
 app.get("/twitter/request_token", (req, res) => {
   oa.getOAuthRequestToken((error, oauthToken, oauthTokenSecret) => {
     if (error) {
@@ -37,17 +45,37 @@ app.get("/twitter/request_token", (req, res) => {
       return res.status(500).json({ error: "Failed to get request token" });
     }
     res.json({
-      oauth_token: oauthToken,
-      oauth_token_secret: oauthTokenSecret,
-      auth_url: `${authorizeURL}?oauth_token=${oauthToken}`,
+      auth_url: `${authorizeURL}?oauth_token=${oauthToken}`
     });
   });
 });
 
-// Railway will inject a dynamic PORT (don’t hardcode 8080)
-const PORT = process.env.PORT;
-if (!PORT) {
-  throw new Error("❌ Railway PORT not set!");
-}
+// Step 2: Twitter redirects here after user logs in
+app.get("/twitter/callback", (req, res) => {
+  const { oauth_token, oauth_verifier } = req.query;
 
+  oa.getOAuthAccessToken(oauth_token, null, oauth_verifier, async (err, accessToken, accessTokenSecret, results) => {
+    if (err) {
+      console.error("❌ Error exchanging token:", err);
+      return res.status(500).send("Twitter auth failed");
+    }
+
+    try {
+      // Use Twitter user_id as Firebase UID
+      const uid = `twitter:${results.user_id}`;
+
+      // Mint a Firebase custom token
+      const firebaseToken = await admin.auth().createCustomToken(uid);
+
+      // Return it as JSON (Unity will consume this)
+      res.json({ firebaseToken });
+    } catch (e) {
+      console.error("❌ Firebase token creation failed:", e);
+      res.status(500).send("Firebase auth failed");
+    }
+  });
+});
+
+// ✅ Use Railway port
+const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));

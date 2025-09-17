@@ -1,13 +1,14 @@
 {
   "name": "twitter-backend",
   "version": "1.0.0",
-  "description": "Twitter OAuth backend for Unity + Firebase",
+  "description": "Twitter OAuth backend for Unity + Firebase (custom token support)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "oauth": "^0.10.0"
+    "oauth": "^0.10.0",
+    "firebase-admin": "^12.0.0"
   }
 }
