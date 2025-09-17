@@ -16,10 +16,26 @@ const authorizeURL = "https://api.twitter.com/oauth/authenticate";
 // 🔹 New callback URL → must be added in Twitter Developer Portal
 const callbackURL = "https://twitter-backend-production-d63a.up.railway.app/twitter/callback";
 
-// Setup Firebase Admin (needs service account JSON in Railway env)
-admin.initializeApp({
-  credential: admin.credential.applicationDefault()
-});
+// ✅ Setup Firebase Admin (load service account JSON from Railway variable FIREBASE_CONFIG)
+if (process.env.FIREBASE_CONFIG) {
+  try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+
+    console.log("✅ Firebase Admin initialized with FIREBASE_CONFIG");
+  } catch (e) {
+    console.error("❌ Failed to parse FIREBASE_CONFIG:", e);
+  }
+} else {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
+
+  console.log("✅ Firebase Admin initialized with applicationDefault()");
+}
 
 // Setup Twitter OAuth client
 const oa = new OAuth(
@@ -54,28 +70,33 @@ app.get("/twitter/request_token", (req, res) => {
 app.get("/twitter/callback", (req, res) => {
   const { oauth_token, oauth_verifier } = req.query;
 
-  oa.getOAuthAccessToken(oauth_token, null, oauth_verifier, async (err, accessToken, accessTokenSecret, results) => {
-    if (err) {
-      console.error("❌ Error exchanging token:", err);
-      return res.status(500).send("Twitter auth failed");
+  oa.getOAuthAccessToken(
+    oauth_token,
+    null,
+    oauth_verifier,
+    async (err, accessToken, accessTokenSecret, results) => {
+      if (err) {
+        console.error("❌ Error exchanging token:", err);
+        return res.status(500).send("Twitter auth failed");
+      }
+
+      try {
+        // Use Twitter user_id as Firebase UID
+        const uid = `twitter:${results.user_id}`;
+
+        // Mint a Firebase custom token
+        const firebaseToken = await admin.auth().createCustomToken(uid);
+
+        // ✅ Return JSON (Unity will consume this or deep link handler will catch it)
+        res.json({ firebaseToken });
+      } catch (e) {
+        console.error("❌ Firebase token creation failed:", e);
+        res.status(500).send("Firebase auth failed");
+      }
     }
-
-    try {
-      // Use Twitter user_id as Firebase UID
-      const uid = `twitter:${results.user_id}`;
-
-      // Mint a Firebase custom token
-      const firebaseToken = await admin.auth().createCustomToken(uid);
-
-      // Return it as JSON (Unity will consume this)
-      res.json({ firebaseToken });
-    } catch (e) {
-      console.error("❌ Firebase token creation failed:", e);
-      res.status(500).send("Firebase auth failed");
-    }
-  });
+  );
 });
 
 // ✅ Use Railway port
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
