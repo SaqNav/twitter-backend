@@ -1,6 +1,7 @@
 const express = require("express");
 const OAuth = require("oauth").OAuth;
 const admin = require("firebase-admin");
+const fetch = require("node-fetch"); // to call Twitter API
 
 const app = express();
 
@@ -13,18 +14,16 @@ const requestTokenURL = "https://api.twitter.com/oauth/request_token";
 const accessTokenURL = "https://api.twitter.com/oauth/access_token";
 const authorizeURL = "https://api.twitter.com/oauth/authenticate";
 
-// 🔹 New callback URL → must be added in Twitter Developer Portal
+// 🔹 Callback URL → must match Twitter Developer Portal
 const callbackURL = "https://twitter-backend-production-d63a.up.railway.app/twitter/callback";
 
-// ✅ Setup Firebase Admin (load service account JSON from Railway variable FIREBASE_CONFIG)
+// ✅ Setup Firebase Admin
 if (process.env.FIREBASE_CONFIG) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
-
     console.log("✅ Firebase Admin initialized with FIREBASE_CONFIG");
   } catch (e) {
     console.error("❌ Failed to parse FIREBASE_CONFIG:", e);
@@ -33,7 +32,6 @@ if (process.env.FIREBASE_CONFIG) {
   admin.initializeApp({
     credential: admin.credential.applicationDefault(),
   });
-
   console.log("✅ Firebase Admin initialized with applicationDefault()");
 }
 
@@ -55,13 +53,13 @@ app.get("/", (req, res) => {
 
 // Step 1: Unity requests Twitter auth URL
 app.get("/twitter/request_token", (req, res) => {
-  oa.getOAuthRequestToken((error, oauthToken, oauthTokenSecret) => {
+  oa.getOAuthRequestToken((error, oauthToken) => {
     if (error) {
       console.error("❌ Error getting request token:", error);
       return res.status(500).json({ error: "Failed to get request token" });
     }
     res.json({
-      auth_url: `${authorizeURL}?oauth_token=${oauthToken}`
+      auth_url: `${authorizeURL}?oauth_token=${oauthToken}`,
     });
   });
 });
@@ -81,18 +79,42 @@ app.get("/twitter/callback", (req, res) => {
       }
 
       try {
+        // 🔹 Call Twitter API to get profile info
+        const verifyUrl =
+          "https://api.twitter.com/1.1/account/verify_credentials.json?include_email=true";
+        const oauthHeader = oa._buildAuthorizationHeaders(
+          oa._prepareParameters(accessToken, accessTokenSecret, "GET", verifyUrl, {})
+        );
+
+        const response = await fetch(verifyUrl, {
+          method: "GET",
+          headers: { Authorization: oauthHeader },
+        });
+        const profile = await response.json();
+
+        console.log("🐦 Twitter profile:", profile);
+
         // Use Twitter user_id as Firebase UID
         const uid = `twitter:${results.user_id}`;
 
-        // Mint a Firebase custom token
-        const firebaseToken = await admin.auth().createCustomToken(uid);
+        // ✅ Add profile info as claims
+        const additionalClaims = {
+          displayName: profile.name || profile.screen_name,
+          photoUrl: profile.profile_image_url_https,
+          email: profile.email || null,
+        };
 
-        // ✅ Redirect to Unity app (deep link)
+        // Mint a Firebase custom token
+        const firebaseToken = await admin
+          .auth()
+          .createCustomToken(uid, additionalClaims);
+
+        // Redirect to Unity deep link with token
         const redirectUrl = `mygame://auth?token=${firebaseToken}`;
         res.redirect(redirectUrl);
       } catch (e) {
-        console.error("❌ Firebase token creation failed:", e);
-        res.status(500).send("Firebase auth failed");
+        console.error("❌ Failed to fetch Twitter profile:", e);
+        res.status(500).send("Twitter profile fetch failed");
       }
     }
   );
