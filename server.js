@@ -78,20 +78,9 @@ app.get("/twitter/callback", (req, res) => {
       }
 
       try {
-        console.log("🐦 Twitter OAuth results:", results);
-
-        // Use Twitter user_id as Firebase UID
+        // ✅ Only UID, no extra claims
         const uid = `twitter:${results.user_id}`;
-
-        // ✅ Only include username as displayName
-        const additionalClaims = {
-          displayName: results.screen_name || "Twitter User",
-        };
-
-        // Mint a Firebase custom token
-        const firebaseToken = await admin
-          .auth()
-          .createCustomToken(uid, additionalClaims);
+        const firebaseToken = await admin.auth().createCustomToken(uid);
 
         // Redirect back into Unity app with token
         const redirectUrl = `mygame://auth?token=${firebaseToken}`;
