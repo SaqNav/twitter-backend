@@ -14,8 +14,7 @@ const accessTokenURL = "https://api.twitter.com/oauth/access_token";
 const authorizeURL = "https://api.twitter.com/oauth/authenticate";
 
 // 🔹 Callback URL → must match Twitter Developer Portal
-const callbackURL =
-  "https://twitter-backend-production-d63a.up.railway.app/twitter/callback";
+const callbackURL = "https://twitter-backend-production-d63a.up.railway.app/twitter/callback";
 
 // ✅ Setup Firebase Admin
 if (process.env.FIREBASE_CONFIG) {
@@ -72,48 +71,35 @@ app.get("/twitter/callback", (req, res) => {
     oauth_token,
     null,
     oauth_verifier,
-    (err, accessToken, accessTokenSecret, results) => {
+    async (err, accessToken, accessTokenSecret, results) => {
       if (err) {
         console.error("❌ Error exchanging token:", err);
         return res.status(500).send("Twitter auth failed");
       }
 
-      // 🔹 Fetch Twitter profile using signed request
-      oa.get(
-        "https://api.twitter.com/1.1/account/verify_credentials.json?include_email=true",
-        accessToken,
-        accessTokenSecret,
-        async (error, profileData) => {
-          if (error) {
-            console.error("❌ Failed to fetch Twitter profile:", error);
-            return res.status(500).send("Twitter profile fetch failed");
-          }
+      try {
+        console.log("🐦 Twitter OAuth results:", results);
 
-          try {
-            const profile = JSON.parse(profileData);
-            console.log("🐦 Twitter profile:", profile);
+        // Use Twitter user_id as Firebase UID
+        const uid = `twitter:${results.user_id}`;
 
-            const uid = `twitter:${results.user_id}`;
-            const additionalClaims = {
-              displayName: profile.name || profile.screen_name,
-              photoUrl: profile.profile_image_url_https,
-              email: profile.email || null,
-            };
+        // ✅ Only include username as displayName
+        const additionalClaims = {
+          displayName: results.screen_name || "Twitter User",
+        };
 
-            // Mint a Firebase custom token
-            const firebaseToken = await admin
-              .auth()
-              .createCustomToken(uid, additionalClaims);
+        // Mint a Firebase custom token
+        const firebaseToken = await admin
+          .auth()
+          .createCustomToken(uid, additionalClaims);
 
-            // ✅ Redirect back into Unity app with token
-            const redirectUrl = `mygame://auth?token=${firebaseToken}`;
-            res.redirect(redirectUrl);
-          } catch (e) {
-            console.error("❌ Error parsing Twitter profile:", e);
-            res.status(500).send("Profile parse failed");
-          }
-        }
-      );
+        // Redirect back into Unity app with token
+        const redirectUrl = `mygame://auth?token=${firebaseToken}`;
+        res.redirect(redirectUrl);
+      } catch (e) {
+        console.error("❌ Firebase token creation failed:", e);
+        res.status(500).send("Firebase auth failed");
+      }
     }
   );
 });
